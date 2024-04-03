@@ -73,7 +73,7 @@ protected:
     bool _loop;
     std::function<void(AUDIO_ID, std::string_view)> _finishCallbak;
 
-    bool _isDestroyed;
+    std::atomic<bool> _isDestroyed;
     bool _removeByAudioEngine;
     bool _ready;
     ALuint _alSource;
@@ -86,7 +86,7 @@ protected:
     std::condition_variable _sleepCondition;
     std::mutex _sleepMutex;
     bool _timeDirty;
-    bool _isRotateThreadExited;
+    std::atomic<bool> _isRotateThreadExited;
 #if defined(__APPLE__)
     std::atomic_bool _needWakeupRotateThread;
 #endif

@@ -505,14 +505,7 @@ AudioCache* AudioEngineImpl::preload(std::string_view filePath, std::function<vo
         _audioCaches.emplace(filePath, std::unique_ptr<AudioCache>(audioCache));
         audioCache->_fileFullPath = FileUtils::getInstance()->fullPathForFilename(filePath);
         unsigned int cacheId      = audioCache->_id;
-        auto isCacheDestroyed     = audioCache->_isDestroyed;
-        AudioEngine::addTask([audioCache, cacheId, isCacheDestroyed]() {
-            if (*isCacheDestroyed)
-            {
-                ALOGV("AudioCache (id=%u) was destroyed, no need to launch readDataTask.", cacheId);
-                audioCache->setSkipReadDataTask(true);
-                return;
-            }
+        AudioEngine::addTask([audioCache, cacheId]() {
             audioCache->readDataTask(cacheId);
         });
     }
@@ -588,7 +581,7 @@ void AudioEngineImpl::_play2d(AudioCache* cache, AUDIO_ID audioID)
     auto player = iter->second;
 
     // Note: It maybe in sub thread or main thread :(
-    if (!*cache->_isDestroyed && cache->_state == AudioCache::State::READY)
+    if (!cache->_isDestroyed && cache->_state == AudioCache::State::READY)
     {
         if (player->play2d())
         {

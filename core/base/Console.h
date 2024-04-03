@@ -389,8 +389,8 @@ protected:
 
     yasio::io_watcher _watcher;
 
-    bool _running;
-    bool _endThread;
+    std::atomic<bool> _running;
+    std::atomic<bool> _endThread;
     bool _isIpv6Server;
 
     hlookup::string_map<Command*> _commands;

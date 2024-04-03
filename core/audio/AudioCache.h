@@ -95,13 +95,13 @@ protected:
 
     std::mutex _readDataTaskMutex;
 
-    State _state;
+    std::atomic<State> _state;
 
-    std::shared_ptr<bool> _isDestroyed;
+    std::atomic<bool> _isDestroyed;
     std::string _fileFullPath;
     unsigned int _id;
-    bool _isLoadingFinished;
-    bool _isSkipReadDataTask;
+    std::atomic<bool> _isLoadingFinished;
+    std::atomic<bool> _isSkipReadDataTask;
 
     friend class AudioEngineImpl;
     friend class AudioPlayer;
