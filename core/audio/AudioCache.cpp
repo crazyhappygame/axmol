@@ -64,7 +64,7 @@ AudioCache::AudioCache()
     , _alBufferId(INVALID_AL_BUFFER_ID)
     , _queBufferFrames(0)
     , _state(State::INITIAL)
-    , _isDestroyed(std::make_shared<bool>(false))
+    , _isDestroyed(false)
     , _id(++__idIndex)
     , _isLoadingFinished(false)
     , _isSkipReadDataTask(false)
@@ -80,7 +80,7 @@ AudioCache::AudioCache()
 AudioCache::~AudioCache()
 {
     ALOGVV("~AudioCache() %p, id=%u, begin", this, _id);
-    *_isDestroyed = true;
+    _isDestroyed = true;
     while (!_isLoadingFinished)
     {
         if (_isSkipReadDataTask)
@@ -105,7 +105,7 @@ AudioCache::~AudioCache()
     }
     else
     {
-        ALOGW("AudioCache (%p), id=%u, buffer isn't ready, state=%d", this, _id, (int)_state);
+        ALOGW("AudioCache (%p), id=%u, buffer isn't ready, state=%d", this, _id, (int)_state.load());
     }
 
     if (_queBufferFrames > 0)
@@ -195,7 +195,7 @@ void AudioCache::readDataTask(unsigned int selfId)
             std::vector<char> pcmBuffer(dataSize, 0);
             auto pcmData = pcmBuffer.data();
 
-            if (*_isDestroyed)
+            if (_isDestroyed)
                 break;
 
             framesRead = decoder->readFixedFrames((std::min)(framesToReadOnce, remainingFrames),
@@ -203,11 +203,11 @@ void AudioCache::readDataTask(unsigned int selfId)
             _framesRead += framesRead;
             remainingFrames -= framesRead;
 
-            if (*_isDestroyed)
+            if (_isDestroyed)
                 break;
 
             uint32_t frames = 0;
-            while (!*_isDestroyed && _framesRead < originalTotalFrames)
+            while (!_isDestroyed && _framesRead < originalTotalFrames)
             {
                 frames = (std::min)(framesToReadOnce, remainingFrames);
                 if (_framesRead + frames > originalTotalFrames)
@@ -221,7 +221,7 @@ void AudioCache::readDataTask(unsigned int selfId)
                 remainingFrames -= framesRead;
             }
 
-            if (*_isDestroyed)
+            if (_isDestroyed)
                 break;
 
             if (_framesRead < originalTotalFrames)
@@ -358,7 +358,7 @@ void AudioCache::addPlayCallback(const std::function<void()>& callback)
         break;
 
     default:
-        ALOGE("Invalid state: %d", (int)_state);
+        ALOGE("Invalid state: %d", (int)_state.load());
         break;
     }
 }
@@ -392,28 +392,22 @@ void AudioCache::addLoadCallback(const std::function<void(bool)>& callback)
         break;
 
     default:
-        ALOGE("Invalid state: %d", (int)_state);
+        ALOGE("Invalid state: %d", (int)_state.load());
         break;
     }
 }
 
 void AudioCache::invokingLoadCallbacks()
 {
-    if (*_isDestroyed)
+    if (_isDestroyed)
     {
         ALOGV("AudioCache (%p) was destroyed, don't invoke preload callback ...", this);
         return;
     }
 
-    auto isDestroyed = _isDestroyed;
-    auto scheduler   = Director::getInstance()->getScheduler();
-    scheduler->runOnAxmolThread([&, isDestroyed]() {
-        if (*isDestroyed)
-        {
-            ALOGV("invokingLoadCallbacks perform in cocos thread, AudioCache (%p) was destroyed!", this);
-            return;
-        }
 
+    auto scheduler   = Director::getInstance()->getScheduler();
+    scheduler->runOnAxmolThread([&]() {
         for (auto&& cb : _loadCallbacks)
         {
             cb(_state == State::READY);
