@@ -15,7 +15,7 @@
  *
  * Copy from: https://github.com/androidx/media/blob/release/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/video/MediaCodecVideoRenderer.java
  * and modified to works on ByteBuffer mode for retrieve video/raw NV12 data
- * patch based on AndroidX Media3 1.2.1, but also works on 1.1.0+
+ * ByteBuffer renderer based on AndroidX Media3 1.2.1, adapted for Media3 1.11.1.
  */
 package dev.axmol.lib;
 
@@ -66,6 +66,7 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.common.util.Util;
 import androidx.media3.decoder.DecoderInputBuffer;
 import androidx.media3.exoplayer.DecoderCounters;
+import androidx.media3.exoplayer.CodecParameters;
 import androidx.media3.exoplayer.DecoderReuseEvaluation;
 import androidx.media3.exoplayer.DecoderReuseEvaluation.DecoderDiscardReasons;
 import androidx.media3.exoplayer.ExoPlaybackException;
@@ -197,6 +198,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   private int consecutiveDroppedFrameCount;
   private int buffersInCodecCount;
   private long lastBufferPresentationTimeUs;
+  private long frameIndex;
   private long lastRenderRealtimeUs;
   private long totalVideoFrameProcessingOffsetUs;
   private int videoFrameProcessingOffsetCount;
@@ -372,6 +374,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
       int maxDroppedFramesToNotify,
       float assumedMinimumCodecOperatingRate) {
     super(
+        context,
         C.TRACK_TYPE_VIDEO,
         codecAdapterFactory,
         mediaCodecSelector,
@@ -431,13 +434,13 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     // Check whether the first decoder supports the format. This is the preferred decoder for the
     // format's MIME type, according to the MediaCodecSelector.
     MediaCodecInfo decoderInfo = decoderInfos.get(0);
-    boolean isFormatSupported = decoderInfo.isFormatSupported(format);
+    boolean isFormatSupported = decoderInfo.isFormatSupported(context, format);
     boolean isPreferredDecoder = true;
     if (!isFormatSupported) {
       // Check whether any of the other decoders support the format.
       for (int i = 1; i < decoderInfos.size(); i++) {
         MediaCodecInfo otherDecoderInfo = decoderInfos.get(i);
-        if (otherDecoderInfo.isFormatSupported(format)) {
+        if (otherDecoderInfo.isFormatSupported(context, format)) {
           decoderInfo = otherDecoderInfo;
           isFormatSupported = true;
           isPreferredDecoder = false;
@@ -477,9 +480,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
               /* requiresTunnelingDecoder= */ true);
       if (!tunnelingDecoderInfos.isEmpty()) {
         MediaCodecInfo tunnelingDecoderInfo =
-            MediaCodecUtil.getDecoderInfosSortedByFormatSupport(tunnelingDecoderInfos, format)
+            MediaCodecUtil.getDecoderInfosSortedByFormatSupport(context, tunnelingDecoderInfos, format)
                 .get(0);
-        if (tunnelingDecoderInfo.isFormatSupported(format)
+        if (tunnelingDecoderInfo.isFormatSupported(context, format)
             && tunnelingDecoderInfo.isSeamlessAdaptationSupported(format)) {
           tunnelingSupport = TUNNELING_SUPPORTED;
         }
@@ -499,6 +502,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
       MediaCodecSelector mediaCodecSelector, Format format, boolean requiresSecureDecoder)
       throws DecoderQueryException {
     return MediaCodecUtil.getDecoderInfosSortedByFormatSupport(
+        context,
         getDecoderInfos(context, mediaCodecSelector, format, requiresSecureDecoder, tunneling),
         format);
   }
@@ -601,11 +605,13 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
 //  }
 
   @Override
-  protected void onPositionReset(long positionUs, boolean joining) throws ExoPlaybackException {
-    super.onPositionReset(positionUs, joining);
+  protected void onPositionReset(long positionUs, boolean joining, boolean sampleStreamIsResetToKeyFrame)
+      throws ExoPlaybackException {
+    super.onPositionReset(positionUs, joining, sampleStreamIsResetToKeyFrame);
     lowerFirstFrameState(FIRST_FRAME_NOT_RENDERED);
     frameReleaseHelper.onPositionReset();
     lastBufferPresentationTimeUs = C.TIME_UNSET;
+    frameIndex = 0;
     initialPositionUs = C.TIME_UNSET;
     consecutiveDroppedFrameCount = 0;
     if (joining) {
@@ -738,12 +744,6 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     return true;
   }
 
-  @Override
-  protected boolean getCodecNeedsEosPropagation() {
-    // Since API 23, onFrameRenderedListener allows for detection of the renderer EOS.
-    return tunneling && Util.SDK_INT < 23;
-  }
-
   @TargetApi(17) // Needed for placeHolderSurface usage, as it is always null on API level 16.
   @Override
   protected MediaCodecAdapter.Configuration getMediaCodecConfiguration(
@@ -779,7 +779,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
 
   @Override
   protected DecoderReuseEvaluation canReuseCodec(
-      MediaCodecInfo codecInfo, Format oldFormat, Format newFormat) {
+      MediaCodecInfo codecInfo, Format oldFormat, Format newFormat, boolean isAdaptiveFormatChange) {
     DecoderReuseEvaluation evaluation = codecInfo.canReuseCodec(oldFormat, newFormat);
 
     @DecoderDiscardReasons int discardReasons = evaluation.discardReasons;
@@ -1008,7 +1008,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     }
     decodedVideoSize =
         new VideoSize(width, height, unappliedRotationDegrees, pixelWidthHeightRatio);
-    frameReleaseHelper.onFormatChanged(format.frameRate);
+    frameReleaseHelper.setSurfaceMediaFrameRate(format.frameRate);
   }
 
   @Override
@@ -1063,7 +1063,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     }
 
     if (bufferPresentationTimeUs != lastBufferPresentationTimeUs) {
-      frameReleaseHelper.onNextFrame(bufferPresentationTimeUs);
+      frameIndex++;
       this.lastBufferPresentationTimeUs = bufferPresentationTimeUs;
     }
 
@@ -1101,7 +1101,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     long systemTimeNs = ClockUtils.nanoTime();
     long unadjustedFrameReleaseTimeNs = systemTimeNs + (earlyUs * 1000);
     // Apply a timestamp adjustment, if there is one.
-    long adjustedReleaseTimeNs = frameReleaseHelper.adjustReleaseTime(unadjustedFrameReleaseTimeNs);
+    long adjustedReleaseTimeNs = frameReleaseHelper.adjustReleaseTime(
+        unadjustedFrameReleaseTimeNs, bufferPresentationTimeUs, C.TIME_UNSET, frameIndex);
     earlyUs = (adjustedReleaseTimeNs - systemTimeNs) / 1000;
     boolean treatDroppedBuffersAsSkipped = joiningDeadlineMs != C.TIME_UNSET;
     if (shouldDropBuffersToKeyframe(earlyUs, elapsedRealtimeUs, isLastBuffer)
@@ -1243,6 +1244,11 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     if (!tunneling) {
       buffersInCodecCount--;
     }
+  }
+
+  @Override
+  protected void onCodecParametersChanged(CodecParameters codecParameters) {
+    eventDispatcher.videoCodecParametersChanged(codecParameters);
   }
 
   @Override
