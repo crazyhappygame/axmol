@@ -1,8 +1,7 @@
 include(CMakeParseArguments)
+find_program(PWSH_EXECUTABLE NAMES pwsh powershell NO_PACKAGE_ROOT_PATH NO_CMAKE_PATH NO_CMAKE_ENVIRONMENT_PATH NO_CMAKE_SYSTEM_PATH NO_CMAKE_FIND_ROOT_PATH)
 
-find_program(PWSH_PROG NAMES pwsh powershell NO_PACKAGE_ROOT_PATH NO_CMAKE_PATH NO_CMAKE_ENVIRONMENT_PATH NO_CMAKE_SYSTEM_PATH NO_CMAKE_FIND_ROOT_PATH)
-
-if(NOT PWSH_PROG)
+if(NOT PWSH_EXECUTABLE)
   message("powershell not found.")
   message(FATAL_ERROR "Please install it https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell, and run CMake again.")
 endif()
@@ -37,7 +36,7 @@ function(ax_sync_target_res ax_target)
       # get_filename_component(link_folder ${opt_LINK_TO} DIRECTORY)
       get_filename_component(link_folder_abs ${opt_LINK_TO} ABSOLUTE)
       add_custom_command(TARGET ${sync_target_name} POST_BUILD
-        COMMAND ${PWSH_PROG} ARGS ${_AX_ROOT}/1k/fsync.ps1
+        COMMAND ${PWSH_EXECUTABLE} ARGS ${_AX_ROOT}/1k/fsync.ps1
         -s ${cc_folder} -d ${link_folder_abs} -l ${opt_SYM_LINK}
       )
     endforeach()
@@ -78,18 +77,18 @@ function(ax_sync_lua_scripts ax_target src_dir dst_dir)
 
   if(MSVC)
     add_custom_command(TARGET ${luacompile_target} POST_BUILD
-      COMMAND ${PWSH_PROG} ARGS ${_AX_ROOT}/1k/fsync.ps1
+      COMMAND ${PWSH_EXECUTABLE} ARGS ${_AX_ROOT}/1k/fsync.ps1
       -s ${src_dir} -d ${dst_dir}
     )
   else()
     if("${CMAKE_BUILD_TYPE}" STREQUAL "")
       add_custom_command(TARGET ${luacompile_target} POST_BUILD
-        COMMAND ${PWSH_PROG} ARGS ${_AX_ROOT}/1k/fsync.ps1
+        COMMAND ${PWSH_EXECUTABLE} ARGS ${_AX_ROOT}/1k/fsync.ps1
         -s ${src_dir} -d ${dst_dir}
       )
     else()
       add_custom_command(TARGET ${luacompile_target} POST_BUILD
-        COMMAND ${PWSH_PROG} ARGS ${_AX_ROOT}/1k/fsync.ps1
+        COMMAND ${PWSH_EXECUTABLE} ARGS ${_AX_ROOT}/1k/fsync.ps1
         -s ${src_dir} -d ${dst_dir}
       )
     endif()
@@ -591,9 +590,16 @@ function(ax_setup_app_config app_name)
       if(WINRT)
         ax_target_embed_compiled_shaders(${app_name} ${rt_output} FILES ${app_all_shaders})
       else()
-        # --preload-file
-        # refer to: https://emscripten.org/docs/porting/files/packaging_files.html
-        target_link_options(${app_name} PRIVATE "--preload-file" ${AXSLCC_OUT_DIR}@axslc/)
+
+        set(_WASM_ASSETS_LINKER_FILE "--embed-file")
+
+        if(AX_WASM_ASSETS_PRELOAD_FILE)
+          # --preload-file
+          # refer to: https://emscripten.org/docs/porting/files/packaging_files.html
+          set(_WASM_ASSETS_LINKER_FILE "--preload-file")
+        endif()
+
+        target_link_options(${app_name} PRIVATE ${_WASM_ASSETS_LINKER_FILE} ${AXSLCC_OUT_DIR}@axslc/)
       endif()
     endif()
   endif()
@@ -610,6 +616,10 @@ if(AX_WASM_ENABLE_DEVTOOLS)
 endif()
 
 set(AX_WASM_EXPORTS "${_AX_WASM_EXPORTS}" CACHE STRING "" FORCE)
+
+option(AX_WASM_ASSETS_PRELOAD_FILE "Assets are preloaded into IndexedDB from .data file" ON)
+
+option(AX_WASM_GENERATE_SYMBOL_FILE "Symbols file for WASM is generated" OFF)
 
 # stupid & pitfall: function not emcc not output .html
 macro(ax_setup_app_props app_name)
@@ -641,12 +651,23 @@ macro(ax_setup_app_props app_name)
     # string(APPEND EMSCRIPTEN_LINK_FLAGS " -s SEPARATE_DWARF_URL=http://127.0.0.1:6931/${app_name}.debug.wasm")
     # string(APPEND EMSCRIPTEN_LINK_FLAGS " -gseparate-dwarf=${CMAKE_BINARY_DIR}/bin/${app_name}/${app_name}.debug.wasm")
     # string(APPEND EMSCRIPTEN_LINK_FLAGS " -gsplit-dwarf")
+
+    if(AX_WASM_GENERATE_SYMBOL_FILE)
+      string(APPEND EMSCRIPTEN_LINK_FLAGS " -g --emit-symbol-map")
+    endif()
+
     if(NOT DEFINED _APP_RES_FOLDER)
       set(_APP_RES_FOLDER "${_APP_SOURCE_DIR}/Content")
     endif()
 
+    set(_WASM_ASSETS_LINKER_FILE "--embed-file")
+
+    if(AX_WASM_ASSETS_PRELOAD_FILE)
+      set(_WASM_ASSETS_LINKER_FILE "--preload-file")
+    endif()
+
     foreach(FOLDER IN LISTS _APP_RES_FOLDER)
-      string(APPEND EMSCRIPTEN_LINK_FLAGS " --preload-file ${FOLDER}/@/")
+      string(APPEND EMSCRIPTEN_LINK_FLAGS " ${_WASM_ASSETS_LINKER_FILE} ${FOLDER}/@/")
     endforeach()
 
     set_target_properties(${app_name} PROPERTIES LINK_FLAGS "${EMSCRIPTEN_LINK_FLAGS}")

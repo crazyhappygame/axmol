@@ -1,3 +1,56 @@
+# axmol-2.11.5 (Sep 25, 2026)
+
+## Bug fixes
+
+- Expose the iOS app delegate's `UIWindow` property for SDK compatibility by @halx99
+- Fix audio seek offsets for multichannel OGG and MP3 files by @halx99 in [#3318](https://github.com/axmolengine/axmol/pull/3318)
+- Fix text alignment in Android `EditBox` while editing by @rh101 in [#3335](https://github.com/axmolengine/axmol/pull/3335)
+- Fix linking errors in `AXLinkHelpers.cmake` for release/2.11.4 by @WUCJ638 in [#3253](https://github.com/axmolengine/axmol/pull/3253)
+- Fix aliases not being cleared after each frame by @rh101 in [#3236](https://github.com/axmolengine/axmol/pull/3236)
+
+## Improvements
+
+- Enable ARC for Apple platforms by @halx99 in [#3343](https://github.com/axmolengine/axmol/pull/3343)
+- Add Xcode 27 support by @rh101 in [#3339](https://github.com/axmolengine/axmol/pull/3339)
+- Update Gradle for Axmol v2 by @theSlyest in [#3306](https://github.com/axmolengine/axmol/pull/3306)
+- Use `UIScene` on iOS 13 and later by @rh101 in [#3284](https://github.com/axmolengine/axmol/pull/3284); use the default `UISceneConfiguration` name by @rh101 in [#3297](https://github.com/axmolengine/axmol/pull/3297)
+- Set all Slider renderers to the correct global Z value by @rh101 in [#3294](https://github.com/axmolengine/axmol/pull/3294)
+- Expose `EditBox` editing state to Lua by @rh101 in [#3277](https://github.com/axmolengine/axmol/pull/3277) and [#3279](https://github.com/axmolengine/axmol/pull/3279)
+- Add a getter for keyboard modifier keys by @rh101 in [#3315](https://github.com/axmolengine/axmol/pull/3315) and [#3316](https://github.com/axmolengine/axmol/pull/3316)
+- Support keyboard modifier keys in Lua by @rh101 in [#3269](https://github.com/axmolengine/axmol/pull/3269) and [#3272](https://github.com/axmolengine/axmol/pull/3272)
+- Add `Director::setMaxDeltaTime` to cap the maximum frame delta time by @halx99 in [#3258](https://github.com/axmolengine/axmol/pull/3258)
+
+
+# axmol-2.11.4 (Jul 6, 2026)
+
+## Bug fixes
+
+- Cherry-pick fixes from v3 by @halx99 [#3134](https://github.com/axmolengine/axmol/pull/3134)
+- Fix UI mistakes in release/2.10.0 by @WUCJ638 [#3161](https://github.com/axmolengine/axmol/pull/3161)
+- Fix for issue #3198 by @rh101 [#3203](https://github.com/axmolengine/axmol/pull/3203)
+- Fix Lua type mismatch with C++ by @halx99 [#3147](https://github.com/axmolengine/axmol/pull/3147)
+- Fix ArchLinux webkitgtk package name by @halx99
+- Fix OpenAL compilation on ArchLinux GCC-15.2.1 by @halx99
+- Fix touch events not working in Windows browsers by @halx99 [#3056](https://github.com/axmolengine/axmol/pull/3056)
+
+## Improvements
+
+- Add Doctest unit testing to C++ template project by @theSlyest [#3121](https://github.com/axmolengine/axmol/pull/3121)
+- Download axslcc from the supported repository by @halx99 [#3171](https://github.com/axmolengine/axmol/pull/3171)
+- Improve setup for ArchLinux by @halx99
+- Refactor GitHub Actions workflow for build jobs by @halx99
+- Add `ui::Widget::getBrightStyle` by @halx99
+
+
+# axmol-2.11.3 (Feb 23, 2026)
+
+## Bug fixes
+
+- Fix cmake symlink path in gradle by @halx99
+- Fix Downloader storage issue, new options for wasm by @AlexandreK38 in [#3049](https://github.com/axmolengine/axmol/pull/3049)
+- Fix chipmunk2D debug draw issues, resize designSize, removed DrawInfo by @aismann in [#3050](https://github.com/axmolengine/axmol/pull/3050)
+- Fix omitted AudioEngine AudioProfile parameter in play2d by @theSlyest in [#3065](https://github.com/axmolengine/axmol/pull/3065)
+
 # axmol-2.11.2 (Jan 15, 2026)
 
 ## Bug fixes
